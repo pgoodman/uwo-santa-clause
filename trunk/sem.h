@@ -13,9 +13,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <alloca.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
+#include <alloca.h>
 
 #include "assert.h"
 
