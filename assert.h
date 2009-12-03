@@ -9,6 +9,9 @@
 #ifndef ASSERT_H_
 #define ASSERT_H_
 
+#include <stdlib.h>
+#include <stdio.h>
+
 #define _QUOTE(x) #x
 #define QUOTE(x) _QUOTE(x)
 

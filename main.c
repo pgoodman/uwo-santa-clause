@@ -5,6 +5,9 @@
  *      Author: petergoodman
  *     Version: $Id$
  *
+ * Solution to the Santa Claus Problem, as seen in The Little Book of
+ * Semaphores.
+ *
  * I think this solution to the Santa Claus problem is deadlock-free. The main
  * reason I think that this solution is deadlock free is because of how the
  * semaphores are used. Most of the semaphores are not actually used to gain

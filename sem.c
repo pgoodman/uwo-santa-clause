@@ -133,16 +133,33 @@ void sem_init_index(sem_set_t *set, const int sem_index, const int value) {
  *
  * Params: - Pointer to semaphore set.
  *         - Value which will be assigned to all semaphores in the above set.
- *
- * Note: the current implementation repeatedly calls sem_init_index, which
- *       isn't ideal; however, it is much simpler than mucking around with
- *       semctl and SETALL.
  */
 void sem_init_all(sem_set_t *set, const int value) {
     int i;
+    unsigned short *sem_ids;
+    my_semun_t arg;
+    struct semid_ds sem_buf;
     assert(NULL != set);
+
+    arg.buf = &sem_buf;
+
+    /* get the info */
+    if(-1 == semctl(set->id, 0, IPC_STAT, arg))  {
+        perror("sem_init_all[semctl:IPC_STAT]");
+        exit(EXIT_FAILURE);
+    }
+
+    /* fill the ids */
+    sem_ids = alloca(sizeof(unsigned short) * set->num_semaphores);
+    arg.array = &(sem_ids[0]);
     for(i = 0; i < set->num_semaphores; ++i) {
-        sem_init_index(set, i, value);
+        sem_ids[i] = value;
+    }
+
+    /* initialize the values */
+    if(-1 == semctl(set->id, 0, SETALL, arg)) {
+        perror("sem_init_all[semctl:SETALL]");
+        exit(EXIT_FAILURE);
     }
 }
 
