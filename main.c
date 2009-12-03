@@ -36,11 +36,15 @@
 static sem_set_t sem_set;
 static sem_set_t elf_line_set;
 
-static sem_t id_counter_mutex;
 static sem_t santa_busy_mutex;
+static sem_t santa_sleep_mutex;
+
+static sem_t id_counter_mutex;
 static sem_t reindeer_counting_sem;
+
+
+
 static set_t elves_waiting;
-static sem_t christmas_mutex;
 static sem_t elf_counting_sem;
 static sem_t elf_mutex;
 
@@ -122,7 +126,13 @@ static void help_elves(void) {
 
     /* help the elves */
     CRITICAL(elf_mutex, {
-        for(i = i; i < NUM_ELVES_PER_GROUP; ++i) {
+
+        fprintf(stdout,
+            "Santa: There are %d elves outside my door! \n",
+            set_cardinality(elves_waiting)
+        );
+
+        for(i = 0; i < NUM_ELVES_PER_GROUP; ++i) {
             elf = set_take(elves_waiting);
             fprintf(stdout, "Santa: helping elf: %d. \n", elf);
             sem_signal_index(&elf_line_set, elf, 1);
@@ -154,9 +164,14 @@ static void *santa(void *_) {
     for(; i--; ) {
 
         /* wait until santa isn't busy to continue */
-        CRITICAL(santa_busy_mutex, {
+        /*CRITICAL(santa_busy_mutex, {
             random_wait("Santa: zzZZzZzzzZZzzz (sleeping) \n", -1);
+        });*/
+        CRITICAL(santa_busy_mutex, {
+            fprintf(stdout, "Santa: zzZZzZzzzZZzzz (sleeping) \n");
         });
+        sem_wait(santa_sleep_mutex);
+        fprintf(stdout, "Santa: I'm up, I'm up! Whaddya want? \n");
 
         /* if we have enough reindeer to deliver presents. Note: while it
          * shouldn't be the case that we have too many reindeer, we account
@@ -166,11 +181,9 @@ static void *santa(void *_) {
             num_reindeer_waiting = NUM_REINDEER;
             prepare_sleigh();
 
-            /* wait until christmas is signalled to be over; christmas starts
-             * out as locked, so unlocking christmas intuitively lets it happen.
-             * this also forces santa not to fall asleep while the reindeer
-             * and being hitched / during christmas. */
-            sem_wait(christmas_mutex);
+            /* lock santa. It's time to deliver presents! */
+            sem_wait(santa_busy_mutex);
+            sem_wait(santa_sleep_mutex);
 
         } else if(3 <= set_cardinality(elves_waiting)) {
             help_elves();
@@ -218,9 +231,15 @@ static void *elf(void *_) {
         CRITICAL(elf_mutex, {
             set_insert(elves_waiting, id);
             fprintf(stdout, "Elf %d in line for santa's help. \n", id);
-            sem_wait_index(&elf_line_set, id);
+
+            /* wake up santa */
+            if(NUM_ELVES_PER_GROUP == set_cardinality(elves_waiting)) {
+                fprintf(stdout, "Elves: waking up santa! \n");
+                sem_signal(santa_sleep_mutex);
+            }
         });
 
+        sem_wait_index(&elf_line_set, id);
         get_help(id);
     }
 
@@ -250,13 +269,21 @@ static void *reindeer(void *_) {
         ++num_reindeer_waiting;
     });
 
-    /* wait until santa has prepared the sleigh */
     fprintf(stdout,
-        "Reindeer %d waiting for the others to arrive back from vacation.\n",
+        "Reindeer %d is back from vacation; waiting for the others.\n",
         id
     );
 
+    if(NUM_REINDEER <= num_reindeer_waiting) {
+        fprintf(stdout, "Reindeer %d: I'm the last one; I'll get santa!\n", id);
+        sem_signal(santa_sleep_mutex);
+    }
+
+    /* santa is awake, now wait for him to tell us that he prepared the
+     * sleigh */
     sem_wait(reindeer_counting_sem);
+
+    /* the sleigh has been prepared, time to get hitched and go! */
     CRITICAL(reindeer_counter_lock, {
         get_hitched(id);
         --(num_reindeer_waiting);
@@ -270,6 +297,12 @@ static void *reindeer(void *_) {
 
     return NULL;
 }
+
+/**
+ * ----------------------------------------------------------------------------
+ * Running the problem.
+ * ----------------------------------------------------------------------------
+ */
 
 /**
  * Launch the threads.
@@ -343,9 +376,9 @@ int main(void) {
             &reindeer_counter_lock,
             &elf_counter_lock,
             &santa_busy_mutex,
+            &santa_sleep_mutex,
             &reindeer_counting_sem,
             &elf_counting_sem,
-            &christmas_mutex,
             &elf_mutex
         );
 
@@ -354,7 +387,7 @@ int main(void) {
         sem_init(reindeer_counter_lock, 1);
         sem_init(elf_counter_lock, 1);
         sem_init(santa_busy_mutex, 1);
-        sem_init(christmas_mutex, 0); /* starts locked! */
+        sem_init(santa_sleep_mutex, 0); /* starts as locked! */
         sem_init(reindeer_counting_sem, 0);
         sem_init(elf_counting_sem, NUM_ELVES_PER_GROUP);
 
