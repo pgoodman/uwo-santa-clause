@@ -164,24 +164,6 @@ void sem_init_all(sem_set_t *set, const int value) {
 }
 
 /**
- * Signal all semaphores within a set.
- *
- * Params: - Pointer to semaphore set.
- *         - The number of times to signal each semaphore in the set.
- *
- * Note: the current implementation repeatedly calls sem_signal_index, which
- *       isn't ideal; however, it is much simpler than mucking around with
- *       semctl and SETALL.
- */
-void sem_signal_all(sem_set_t *set, const int num_signals) {
-    int i;
-    assert(NULL != set);
-    for(i = 0; i < set->num_semaphores; ++i) {
-        sem_signal_index(set, i, num_signals);
-    }
-}
-
-/**
  * Wait until a given semaphore has cleared.
  *
  * Params: - Pointer to semaphore set to which the indexed semaphore belongs.
