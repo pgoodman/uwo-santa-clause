@@ -18,8 +18,6 @@
  *
  * Suppose that a deadlock could occur. Most likely, the deadlock would occur
  * with the interaction of one of santa_busy_mutex and santa_sleeping_mutex.
- *
-
  */
 
 #include <stdio.h>
@@ -30,6 +28,7 @@
 #include <limits.h>
 #include <string.h>
 
+#include "assert.h"
 #include "sem.h"
 #include "set.h"
 
@@ -41,20 +40,26 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-/* set of all semaphores (sem_t) listed below, needed in at-exit handler, hence
- * global. */
-static sem_set_t sem_set;
+/*
+ * NOTE: all global variables below are needed in no fewer than
+ *       2 + MIN(NUM_ELVES, NUM_REINDEER) threads, i.e. main, santa, and all
+ *       elves or all reindeer. Some of the variables, such as santa_* ones are
+ *       needed in every thread. Finally, all sets are needed in the at-exit
+ *       handler.
+ */
 
 /* set of semaphores used to figure out which elves are currently in line. each
  * elf is given its own semaphore, and in a sense, santa dispatches to the
  * elves that he can help them by signalling particular semaphores in the set.
- * all semaphores in the set start off as locked. Needed in at-exit handler.
+ * all semaphores in the set start off as locked.
  */
 static sem_set_t elf_line_set;
 
+/* set of all semaphores (sem_t) listed below. */
+static sem_set_t sem_set;
+
 /* mutexes to keep track of whether or not santa is working with elves or on
- * the sleigh, and whether or not santa is currently asleep. These must be
- * global as they are needed by every thread. */
+ * the sleigh, and whether or not santa is currently asleep. */
 static sem_t santa_busy_mutex;
 static sem_t santa_sleep_mutex;
 
@@ -149,6 +154,10 @@ static void prepare_sleigh(void) {
  * Santa thread. Note: do not launch more than one!
  */
 static void *santa(void *_) {
+    static int num_launched = 0;
+
+    assert(1 == ++num_launched);
+
     while(1) {
 
         /* wait until santa isn't busy to continue */
@@ -165,7 +174,7 @@ static void *santa(void *_) {
             num_reindeer_waiting = NUM_REINDEER;
             prepare_sleigh();
 
-            /* lock santa. It's time to deliver presents! */
+            /* completely lock santa; It's time to deliver presents! */
             sem_wait(santa_busy_mutex);
             sem_wait(santa_sleep_mutex);
 
@@ -286,7 +295,7 @@ static void *reindeer(void *reindeer_id) {
 
 /**
  * ----------------------------------------------------------------------------
- * Running the problem.
+ * Set up and run the problem.
  * ----------------------------------------------------------------------------
  */
 
