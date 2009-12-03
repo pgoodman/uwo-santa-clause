@@ -5,7 +5,21 @@
  *      Author: petergoodman
  *     Version: $Id$
  *
- * This algori
+ * I think this solution to the Santa Claus problem is deadlock-free. The main
+ * reason I think that this solution is deadlock free is because of how the
+ * semaphores are used. Most of the semaphores are not actually used to gain
+ * mutual exclusion over a shared resource but instead as a means to signal
+ * to another thread that something can be done. Thus, there are very few
+ * critical sections, where a mutex locks the critical region of memory. As a
+ * result, semaphores are left locked or unlocked on purpose, waiting for
+ * something to dispatch to them. Further, another goal was to have small
+ * critical regions that don't involve more than one mutex over a shared
+ * resource (aside from any used in external data structures).
+ *
+ * Suppose that a deadlock could occur. Most likely, the deadlock would occur
+ * with the interaction of one of santa_busy_mutex and santa_sleeping_mutex.
+ *
+
  */
 
 #include <stdio.h>
@@ -44,17 +58,29 @@ static sem_set_t elf_line_set;
 static sem_t santa_busy_mutex;
 static sem_t santa_sleep_mutex;
 
-/*
- */
+/* used to signal when reindeer can start getting hitched, when santa has
+ * prepared the sleigh, he signals this counter NUM_REINDEER_TIMES. */
 static sem_t reindeer_counting_sem;
-static sem_t reindeer_counter_lock;
-static int num_reindeer_waiting = 0; /* locked by reindeer_counter_lock */
 
-/*
- */
+/* keep track of how many reindeer are in line, and then how many reindeer have
+ * been hitched; locked by reindeer_counter_lock. */
+static sem_t reindeer_counter_lock;
+static int num_reindeer_waiting = 0;
+
+/* keep track of the elves lined up in an unordered way.  */
 static set_t elves_waiting;
+
+/* make sure that no more than NUM_ELVES_PER_GROUP elves line up at one time;
+ * starts off at NUM_ELVES_PER_GROUP and then decreases, when santa has helped
+ * out the elves it's signalled NUM_ELVES_PER_GROUP times. */
 static sem_t elf_counting_sem;
+
+/* make sure that santa helping an elf is mutually exclusive from an elf
+ * getting in line to see santa. */
 static sem_t elf_mutex;
+
+/* keep track of how many of the NUM_ELVES_PER_GROUP lined up elves have been
+ * helped by santa; locked by elf_counter_lock. */
 static sem_t elf_counter_lock;
 static int num_elves_being_helped = 0;
 
@@ -110,10 +136,10 @@ static void help_elves(void) {
 
 /**
  * Prepare the sleigh for the reindeer; function required by problem
- * specification.
+ * specification. Make santa busy (thus blocking elves and sleep) and signal
+ * that reindeer can start hitching onto the sleigh.
  */
 static void prepare_sleigh(void) {
-    /* block out elves from getting santa and then free up reindeer  */
     sem_wait(santa_busy_mutex);
     fprintf(stdout, "Santa: preparing the sleigh. \n");
     sem_signal_ntimes(reindeer_counting_sem, NUM_REINDEER);
@@ -131,11 +157,9 @@ static void *santa(void *_) {
         });
 
         sem_wait(santa_sleep_mutex);
+
         fprintf(stdout, "Santa: I'm up, I'm up! Whaddya want? \n");
 
-        /* if we have enough reindeer to deliver presents. Note: while it
-         * shouldn't be the case that we have too many reindeer, we account
-         * for this possibility and fix the counter. */
         if(NUM_REINDEER <= num_reindeer_waiting) {
 
             num_reindeer_waiting = NUM_REINDEER;
@@ -167,7 +191,7 @@ static void get_help(const int id) {
     CRITICAL(elf_counter_lock, {
         --num_elves_being_helped;
 
-        /* unlock santa */
+        /* unlock santa; signal that elves can line up again */
         if(!num_elves_being_helped) {
             sem_signal(santa_busy_mutex);
             sem_signal_ntimes(elf_counting_sem, NUM_ELVES_PER_GROUP);
