@@ -41,7 +41,7 @@ void sem_signal_all(sem_set_t *set, const int num_signals);
 
 /* operations on individual semaphores */
 void sem_init_index(sem_set_t *set, const int sem_index, const int value);
-void sem_wait_index(sem_set_t *set, const int which_semaphore);
+void sem_wait_index(sem_set_t *set, const int sem_index);
 void sem_signal_index(sem_set_t *set,
                       const int sem_index,
                       const int num_signals);
