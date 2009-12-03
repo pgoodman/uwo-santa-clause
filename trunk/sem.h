@@ -35,9 +35,7 @@ typedef struct {
 void sem_fill_set(sem_set_t *set, const int num_semaphores);
 void sem_empty_set(sem_set_t *set);
 void sem_unpack_set(sem_set_t *set, sem_t *sem1, ...);
-
 void sem_init_all(sem_set_t *set, const int value);
-void sem_signal_all(sem_set_t *set, const int num_signals);
 
 /* operations on individual semaphores */
 void sem_init_index(sem_set_t *set, const int sem_index, const int value);
