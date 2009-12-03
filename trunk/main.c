@@ -4,6 +4,8 @@
  *  Created on: Dec 1, 2009
  *      Author: petergoodman
  *     Version: $Id$
+ *
+ * This algori
  */
 
 #include <stdio.h>
@@ -25,31 +27,34 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-/* the sets of semaphores used for the solution.
- *
- * The first is for a few miscellaneous semaphores needed to see if santa is
- * busy, keep mutual exclusion over the reindeer counter, etc.
- *
- * The second has one semaphore per elf. Each semaphore is a mutex lock saying
- * whether or not santa is available to help the elf or not.
- *
- * These sets must be global so that we can ensure they will be freed at exit.
- */
+/* set of all semaphores (sem_t) listed below, needed in at-exit handler, hence
+ * global. */
 static sem_set_t sem_set;
+
+/* set of semaphores used to figure out which elves are currently in line. each
+ * elf is given its own semaphore, and in a sense, santa dispatches to the
+ * elves that he can help them by signalling particular semaphores in the set.
+ * all semaphores in the set start off as locked. Needed in at-exit handler.
+ */
 static sem_set_t elf_line_set;
 
+/* mutexes to keep track of whether or not santa is working with elves or on
+ * the sleigh, and whether or not santa is currently asleep. These must be
+ * global as they are needed by every thread. */
 static sem_t santa_busy_mutex;
 static sem_t santa_sleep_mutex;
 
+/*
+ */
 static sem_t reindeer_counting_sem;
-
-static set_t elves_waiting;
-static sem_t elf_counting_sem;
-static sem_t elf_mutex;
-
 static sem_t reindeer_counter_lock;
 static int num_reindeer_waiting = 0; /* locked by reindeer_counter_lock */
 
+/*
+ */
+static set_t elves_waiting;
+static sem_t elf_counting_sem;
+static sem_t elf_mutex;
 static sem_t elf_counter_lock;
 static int num_elves_being_helped = 0;
 
