@@ -17,10 +17,43 @@
  * result, semaphores are left locked or unlocked on purpose, waiting for
  * something to dispatch to them. Further, another goal was to have small
  * critical regions that don't involve more than one mutex over a shared
- * resource (aside from any used in external data structures).
+ * resource (aside from any used in external data structures). That is, the
+ * program never waits on a semaphore within a critical region (except when
+ * dealing with set_t).
  *
- * Suppose that a deadlock could occur. Most likely, the deadlock would occur
- * with the interaction of one of santa_busy_mutex and santa_sleeping_mutex.
+ * Suppose that a deadlock could occur. I will take the approach of choosing
+ * waits/signals/critical sections and then figuring out what it would take in
+ * order for that piece of code to deadlock.
+ *
+ * Most likely the deadlock will not occur by the interaction of the semaphores
+ * from the elf_line_set as each semaphore can only ever be accessed by two
+ * threads: santa, and the specific elf owning that semaphore. These semaphores
+ * start off locked, and are only unlocked by santa and then re-locked by the
+ * elves, so it won't be these semaphores that get deadlocked.
+ *
+ * The elf_counting_sem counting semaphore also won't be responsible for the
+ * deadlock as its behavior is very simple: count down from 3.
+ *
+ * Most likely, a deadlock would result from the interaction of
+ * santa_busy_mutex, santa_sleep_mutex, and elf_mutex. Note that
+ * the former two semaphores are only ever used sequentially, never in a nested
+ * fashion. However, within the elf_mutex critical section the sleep and busy
+ * mutexes are only ever signalled.
+ *
+ * The simplicity of the bitset datastructure (which incidentally isn't
+ * necessarily needed but provides a nice abstraction) is such that it will
+ * never encounter an internal deadlock, and its write operations are mutually
+ * exclusive.
+ *
+ * We almost force a deadlock of sorts with prepare_sleigh and the semaphore
+ * waits following its call, however, this is intentional as by this time the
+ * simulation is done and we want to *force* other threads to not be able to
+ * do communicate with santa.
+ *
+ * A remaining idea is that, in terms of the way some semaphores are used not
+ * to gain mutual exclusion but to signal action, the "critical sections"
+ * (although technically they aren't critical) end up spanning multiple
+ * functions. Such cases are, however, too difficult to reason about.
  */
 
 #include <stdio.h>
@@ -35,11 +68,15 @@
 #include "sem.h"
 #include "set.h"
 
-#define MAX_WAIT_TIME (INT_MAX >> 4)
 #define NUM_REINDEER 10
 #define NUM_ELVES 9
 #define NUM_ELVES_PER_GROUP 3
-#define MAX_MESSAGE_LENGTH 100
+
+/* should "waits" take up time? */
+#define OBSERVABLE_DELAYS 1
+
+/* max wait time (in approx. cycles) if OBSERVABLE_DELAYS is set */
+#define MAX_WAIT_TIME (INT_MAX >> 4)
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -103,7 +140,9 @@ static int num_elves_being_helped = 0;
 static void random_wait(const char *message, const int format_var) {
     unsigned int i = rand() % MAX_WAIT_TIME;
     fprintf(stdout, message, format_var);
-    for(; --i; ) /* ho ho ho! */;
+    if(OBSERVABLE_DELAYS) {
+        for(; --i; ) /* ho ho ho! */;
+    }
 }
 
 /**
@@ -318,6 +357,15 @@ static void sequence_pthreads(int num_threads,
 /**
  * Free all resources. Note: performing a set_free as opposed to a
  * set_exit_free would result (usually) in an error calling free().
+ *
+ * So, why use an at-exit and signal handler? The motivation is so that while
+ * testing and generally running this simulation, the person running can stop
+ * it at any time they please using ctrl-C and still know that the semaphores
+ * have been freed.
+ *
+ * Also, if any errors occur, e.g. in an assert, then exit is called then the
+ * semaphores will STILL be freed. Thus, at-exit and as-sigterm is a sensible
+ * way to meet the assignment requirement.
  */
 static void free_resources(void) {
     static int resources_freed = 0;

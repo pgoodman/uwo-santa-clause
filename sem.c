@@ -8,7 +8,9 @@
  * Library for working with a small set of semaphores. This library allows one
  * to individually work with semaphores with the appearance that they are
  * independent of the set to which they belong. For small problems this is
- * extremely convenient.
+ * extremely convenient. This library also allows for working with semaphore
+ * sets on a larger set by indexing into the set. This is the usual way of
+ * working with them.
  */
 
 #include "sem.h"
@@ -133,6 +135,8 @@ void sem_init_index(sem_set_t *set, const int sem_index, const int value) {
  *
  * Params: - Pointer to semaphore set.
  *         - Value which will be assigned to all semaphores in the above set.
+ *
+ * Side-Effects: If this function fails then the program will be exited.
  */
 void sem_init_all(sem_set_t *set, const int value) {
     int i;
@@ -151,6 +155,11 @@ void sem_init_all(sem_set_t *set, const int value) {
 
     /* fill the ids */
     sem_ids = alloca(sizeof(unsigned short) * set->num_semaphores);
+    if(NULL == sem_ids) {
+        perror("sem_init_all[alloca]");
+        exit(EXIT_FAILURE);
+    }
+
     arg.array = &(sem_ids[0]);
     for(i = 0; i < set->num_semaphores; ++i) {
         sem_ids[i] = value;
