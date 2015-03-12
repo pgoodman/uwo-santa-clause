@@ -1,0 +1,1 @@
+This is a solution for the Santa Claus problem that I created for my CS3305 class at UWO. The assignment requirements are such that the code must be in C, use pthreads, and use UNIX semaphores.
